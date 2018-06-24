@@ -20,15 +20,20 @@ from utils import label_map_util
 from utils import visualization_utils as vis_util
 
 # Path to frozen detection graph. This is the actual model that is used for the object detection.
-PATH_TO_CKPT = '/home/deepdot/Dataset/check_point/model.ckpt'
+PATH_TO_CKPT = '/home/xiangxin/gitclients/models/research/object_detection/ssd_mobilenet_v1_focal_loss/frozen_inference_graph.pb'
 
 # List of the strings that is used to add correct label for each box.
 PATH_TO_LABELS = "/home/deepdot/Dataset/Budweiser/label_map.pbtxt"
 
 NUM_CLASSES = 30
 
-
 detection_graph = tf.Graph()
+with detection_graph.as_default():
+    od_graph_def = tf.GraphDef()
+    with tf.gfile.GFile(PATH_TO_CKPT, 'rb') as fid:
+        serialized_graph = fid.read()
+        od_graph_def.ParseFromString(serialized_graph)
+        tf.import_graph_def(od_graph_def, name='')
 
 print("Successfully loaded the model.")
 
@@ -43,8 +48,6 @@ def load_image_into_numpy_array(image):
     print("Image size: %d x %d" % (im_width, im_height))
     return np.array(image.getdata()).reshape((im_height, im_width, 3)).astype(np.uint8)
 
-PATH_TO_TEST_IMAGES_DIR = 'test_images'
-TEST_IMAGE_PATHS = [ os.path.join(PATH_TO_TEST_IMAGES_DIR, 'image{}.jpg'.format(i)) for i in range(1, 3) ]
 PATH_TO_TEST_IMAGES_DIR = '/home/deepdot/Dataset/Budweiser/top1000/images/'
 TEST_IMAGE_PATHS = glob.glob(PATH_TO_TEST_IMAGES_DIR + '/02*.jpg')
 
@@ -54,8 +57,6 @@ IMAGE_SIZE = (12, 8)
 def run_inference_for_single_image(image, graph):
     with graph.as_default():
         with tf.Session() as sess:
-            saver = tf.train.import_meta_graph(PATH_TO_CKPT + '.meta')
-            saver.restore(sess, PATH_TO_CKPT)
             # Get handles to input and output tensors
             ops = tf.get_default_graph().get_operations()
             all_tensor_names = {output.name for op in ops for output in op.outputs}
@@ -117,4 +118,3 @@ for image_path in TEST_IMAGE_PATHS:
     plt.figure(figsize=IMAGE_SIZE)
     plt.imshow(image_np)
     plt.show()
-
