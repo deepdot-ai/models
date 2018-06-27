@@ -9,6 +9,16 @@ py_binary(
   ],
 )
 
+py_binary(
+  name = "eval",
+  srcs = [
+    "eval.py",
+  ],
+  srcs_version = "PY2AND3",
+  deps = [
+    "@org_tensorflow//tensorflow:tensorflow_py",
+  ],
+)
 
 py_binary(
   name = "export_inference_graph",
