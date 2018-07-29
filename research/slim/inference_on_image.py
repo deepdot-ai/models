@@ -1,7 +1,5 @@
 import numpy as np
 import os
-import six.moves.urllib as urllib
-import tarfile
 import sys
 import glob
 import tensorflow as tf
@@ -9,12 +7,7 @@ import time
 from matplotlib import pyplot as plt
 from PIL import Image
 
-sys.path.append("..")
-
-from object_detection.utils import ops as utils_ops
-
-if tf.__version__ < '1.4.0':
-    raise ImportError('Please upgrade your tensorflow installation to v1.4.* or later!')
+sys.path.append("research/object_detection")
 
 from utils import label_map_util
 from utils import visualization_utils as vis_util
@@ -22,12 +15,11 @@ from utils import visualization_utils as vis_util
 # Path to frozen detection graph. This is the actual model that is used for the object detection.
 #PATH_TO_CKPT = '/home/xiangxin/gitclients/models/research/object_detection/ssd_mobilenet_v1_focal_loss/frozen_inference_graph.pb'
 #PATH_TO_CKPT = '/home/deepdot/Dataset/check_point/faster_rcnn_resnet101/frozen_inference_graph.pb'
-PATH_TO_CKPT = '/home/deepdot/Models/frcnn_res101_beer_07_07_2018/frozen_inference_graph.pb'
+PATH_TO_CKPT = '/home/xiangxin/exp/res50_beer_lr_1e-3/inference/frozen_inference_graph.pb'
 
 # List of the strings that is used to add correct label for each box.
-PATH_TO_LABELS = "/home/deepdot/Dataset/Budweiser/label_map.pbtxt"
-
-NUM_CLASSES = 30
+PATH_TO_LABELS = "/home/deepdot/Dataset/Budweiser/scene_label_map.pbtxt"
+NUM_CLASSES = 4
 
 detection_graph = tf.Graph()
 with detection_graph.as_default():
@@ -48,10 +40,20 @@ print("Successfully loaded the label map.")
 def load_image_into_numpy_array(image):
     (im_width, im_height) = image.size
     print("Image size: %d x %d" % (im_width, im_height))
-    return np.array(image.getdata()).reshape((im_height, im_width, 3)).astype(np.uint8)
+    image = image.resize([224, 224], Image.ANTIALIAS)
+    (im_width, im_height) = image.size
+    print("Image size: %d x %d" % (im_width, im_height))
+    _R_MEAN = 123.68
+    _G_MEAN = 116.78
+    _B_MEAN = 103.94
+    np_image = np.array(image.getdata()).reshape((224, 224, 3)).astype(np.uint8)
+    np_image[:,:,0] = np_image[:,:,0] - _R_MEAN;
+    np_image[:,:,1] = np_image[:,:,1] - _G_MEAN;
+    np_image[:,:,2] = np_image[:,:,2] - _B_MEAN;
+    return np_image
 
-PATH_TO_TEST_IMAGES_DIR = '/home/deepdot/Dataset/Budweiser/top1000/images/'
-TEST_IMAGE_PATHS = glob.glob(PATH_TO_TEST_IMAGES_DIR + '/02*4.jpg')
+PATH_TO_TEST_IMAGES_DIR = '/home/deepdot/Dataset/Budweiser/debug_images'
+TEST_IMAGE_PATHS = glob.glob(PATH_TO_TEST_IMAGES_DIR + '/*/*.jpg')
 
 # Size, in inches, of the output images.
 IMAGE_SIZE = (12, 8)
@@ -63,18 +65,19 @@ def run_inference_for_single_image(image, graph):
             ops = tf.get_default_graph().get_operations()
             all_tensor_names = {output.name for op in ops for output in op.outputs}
             tensor_dict = {}
-            for key in [ 'num_detections', 'detection_boxes', 'detection_scores', 'detection_classes', 'detection_masks' ]:
+            for key in [ 'resnet_v2_50/predictions/Softmax', 'resnet_v2_50/predictions/Reshape_1' ]:
                 tensor_name = key + ':0'
+                print tensor_name
                 if tensor_name in all_tensor_names:
                     tensor_dict[key] = tf.get_default_graph().get_tensor_by_name(tensor_name)
-            image_tensor = tf.get_default_graph().get_tensor_by_name('image_tensor:0')
+            image_tensor = tf.get_default_graph().get_tensor_by_name('input:0')
             # Run inference
             output_dict = sess.run(tensor_dict, feed_dict={image_tensor: np.expand_dims(image, 0)})
-
-            output_dict['num_detections'] = int(output_dict['num_detections'][0])
-            output_dict['detection_classes'] = output_dict['detection_classes'][0].astype(np.uint8)
-            output_dict['detection_boxes'] = output_dict['detection_boxes'][0]
-            output_dict['detection_scores'] = output_dict['detection_scores'][0]
+            #output_dict['num_detections'] = int(output_dict['num_detections'][0])
+            #output_dict['detection_classes'] = output_dict['detection_classes'][0].astype(np.uint8)
+            #output_dict['detection_boxes'] = output_dict['detection_boxes'][0]
+            output_dict['resnet_v2_50/predictions/Softmax'] = output_dict['resnet_v2_50/predictions/Softmax'][0]
+            output_dict['resnet_v2_50/predictions/Reshape_1'] = output_dict['resnet_v2_50/predictions/Reshape_1'][0]
     return output_dict
 
 for image_path in TEST_IMAGE_PATHS:
@@ -94,30 +97,26 @@ for image_path in TEST_IMAGE_PATHS:
     output_dict = run_inference_for_single_image(image_np, detection_graph)
     end = time.time()
     print("Finished inference in %f seconds." % (end - start))
-    print("Number of detections: %d" % output_dict['num_detections'])
-    print("detection_boxes")
-    print output_dict['detection_boxes'].shape
-    print("detection_classes")
-    print output_dict['detection_classes'].shape
-    print("detection_scores")
-    print output_dict['detection_scores'].shape
-    print "First detection:"
-    box = output_dict['detection_boxes'][0, :]
-    print "box %f, %f, %f, %f" % (box[0], box[1], box[2], box[3])
-    print "class %d" % (output_dict['detection_classes'][0])
-    print "score %f" % (output_dict['detection_scores'][0])
+    print("resnet_v2_50/predictions/Softmax")
+    print output_dict['resnet_v2_50/predictions/Softmax'].shape
+    for i in range(4):
+        print "score %f" % (output_dict['resnet_v2_50/predictions/Softmax'][i])
+    print("resnet_v2_50/predictions/Reshape_1")
+    print output_dict['resnet_v2_50/predictions/Reshape_1'].shape
+    for i in range(4):
+        print "score %f" % (output_dict['resnet_v2_50/predictions/Reshape_1'][i])
     # Visualization of the results of a detection.
-    vis_util.visualize_boxes_and_labels_on_image_array(
-        image_np,
-        output_dict['detection_boxes'],
-        output_dict['detection_classes'],
-        output_dict['detection_scores'],
-        category_index,
-        instance_masks=output_dict.get('detection_masks'),
-        use_normalized_coordinates=True,
-        max_boxes_to_draw=200,
-        min_score_thresh=.3,
-          line_thickness=10)
-    plt.figure(figsize=IMAGE_SIZE)
-    plt.imshow(image_np)
-    plt.show()
+#    vis_util.visualize_boxes_and_labels_on_image_array(
+        #image_np,
+        #output_dict['detection_boxes'],
+        #output_dict['detection_classes'],
+        #output_dict['detection_scores'],
+        #category_index,
+        #instance_masks=output_dict.get('detection_masks'),
+        #use_normalized_coordinates=True,
+        #max_boxes_to_draw=200,
+        #min_score_thresh=.3,
+          #line_thickness=10)
+    #plt.figure(figsize=IMAGE_SIZE)
+    #plt.imshow(image_np)
+    #plt.show()
